@@ -1,14 +1,16 @@
 """
 telegram_notifier.py - Send messages, photos, videos, and media groups via Telegram Bot API.
 
-Supports:
-  - send_message       : plain text with optional link preview
-  - send_photo         : single image upload
-  - send_video         : single video upload (playable in Telegram)
-  - send_video_url     : video by URL (Telegram fetches it directly)
-  - send_media_group   : album of photos and/or videos
-  - notify_youtube     : YouTube notification (thumbnail + link preview)
-  - notify_tweet       : tweet with photos/videos or text fallback
+notify_youtube() strategy:
+  1. video_bytes provided  → sendVideo (plays natively, has scrubbar in Telegram)
+  2. no video / too large  → sendPhoto (thumbnail) with Watch link — rich card, no dead player
+  3. no thumbnail either   → sendMessage with link preview
+
+notify_tweet() strategy:
+  1. video_bytes  → sendVideo
+  2. video_url    → sendVideo by URL
+  3. images       → sendPhoto / sendMediaGroup
+  4. text only    → sendMessage with link preview
 """
 
 import io
@@ -24,36 +26,31 @@ from client import http_client
 
 log = logging.getLogger(__name__)
 
-BASE_URL   = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
-MAX_RETRIES  = 3
-RETRY_DELAY  = 5   # seconds between retries
-RATE_DELAY   = 1   # seconds between consecutive Telegram API calls
-
-# Telegram hard limits
-MAX_CAPTION_LEN  = 1024
-MAX_VIDEO_BYTES  = 50 * 1024 * 1024   # 50 MB upload limit
-MAX_PHOTO_BYTES  = 10 * 1024 * 1024   # 10 MB photo upload limit
+BASE_URL        = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+MAX_RETRIES     = 3
+RETRY_DELAY     = 5
+RATE_DELAY      = 1        # seconds between Telegram API calls
+MAX_CAPTION_LEN = 1024
+MAX_VIDEO_BYTES = 50 * 1024 * 1024   # 50 MB hard Telegram limit
+MAX_PHOTO_BYTES = 10 * 1024 * 1024   # 10 MB
 
 
-# ── Internal helpers ─────────────────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _trunc(text: str, limit: int = MAX_CAPTION_LEN) -> str:
-    """Truncate caption to Telegram's limit."""
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
 def _retry(fn, *args, **kwargs):
-    """Retry a callable up to MAX_RETRIES times with exponential back-off."""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             return fn(*args, **kwargs)
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
-            # 429 = rate limited — honour Retry-After header if present
             if status == 429:
-                retry_after = int(exc.response.headers.get("Retry-After", RETRY_DELAY * attempt))
-                log.warning("Telegram rate-limited. Waiting %ds...", retry_after)
-                time.sleep(retry_after)
+                wait = int(exc.response.headers.get("Retry-After", RETRY_DELAY * attempt))
+                log.warning("Rate-limited by Telegram. Waiting %ds...", wait)
+                time.sleep(wait)
             else:
                 log.warning("Attempt %d/%d — HTTP %d: %s", attempt, MAX_RETRIES, status, exc)
                 if attempt < MAX_RETRIES:
@@ -69,7 +66,6 @@ def _retry(fn, *args, **kwargs):
 # ── Core send primitives ─────────────────────────────────────────────────────
 
 def send_message(text: str, parse_mode: str = "HTML", preview_url: str = None) -> bool:
-    """Send a plain text message, optionally with a rich link preview."""
     def _send():
         payload = {
             "chat_id":    TELEGRAM_CHAT_ID,
@@ -94,9 +90,8 @@ def send_message(text: str, parse_mode: str = "HTML", preview_url: str = None) -
 
 
 def send_photo(image_bytes: bytes, caption: str = "", parse_mode: str = "HTML") -> bool:
-    """Upload and send a single photo."""
     if len(image_bytes) > MAX_PHOTO_BYTES:
-        log.warning("Photo too large (%d MB), skipping upload.", len(image_bytes) // 1024 // 1024)
+        log.warning("Photo too large (%.1f MB), skipping.", len(image_bytes) / 1024 / 1024)
         return False
 
     def _send():
@@ -115,12 +110,38 @@ def send_photo(image_bytes: bytes, caption: str = "", parse_mode: str = "HTML") 
     return bool(result)
 
 
-def send_video(video_bytes: bytes, caption: str = "", parse_mode: str = "HTML",
-               thumb_bytes: bytes = None) -> bool:
-    """Upload and send a video file. Falls back gracefully if too large."""
+def send_photo_url(url: str, caption: str = "", parse_mode: str = "HTML") -> bool:
+    """Ask Telegram to fetch a photo by URL (no local download needed)."""
+    def _send():
+        r = http_client.post(
+            f"{BASE_URL}/sendPhoto",
+            json={
+                "chat_id":    TELEGRAM_CHAT_ID,
+                "photo":      url,
+                "caption":    _trunc(caption),
+                "parse_mode": parse_mode,
+            },
+        )
+        r.raise_for_status()
+        return True
+
+    result = _retry(_send)
+    if result:
+        log.info("Photo URL sent.")
+    time.sleep(RATE_DELAY)
+    return bool(result)
+
+
+def send_video(
+    video_bytes: bytes,
+    caption: str = "",
+    parse_mode: str = "HTML",
+    thumb_bytes: bytes = None,
+) -> bool:
+    """Upload a video file — plays natively inside Telegram (desktop + web + mobile)."""
     size_mb = len(video_bytes) / 1024 / 1024
     if len(video_bytes) > MAX_VIDEO_BYTES:
-        log.warning("Video too large (%.1f MB) for direct upload, skipping.", size_mb)
+        log.warning("Video %.1f MB exceeds Telegram limit, cannot upload.", size_mb)
         return False
 
     def _send():
@@ -136,21 +157,21 @@ def send_video(video_bytes: bytes, caption: str = "", parse_mode: str = "HTML",
                 "supports_streaming": "true",
             },
             files=files,
-            timeout=120,   # large upload needs more time
+            timeout=180,   # large upload needs extra time
         )
         r.raise_for_status()
         return True
 
     result = _retry(_send)
     if result:
-        log.info("Video sent (%.1f MB).", size_mb)
+        log.info("Video uploaded (%.1f MB).", size_mb)
     time.sleep(RATE_DELAY)
     return bool(result)
 
 
 def send_video_url(url: str, caption: str = "", parse_mode: str = "HTML",
                    thumb_url: str = None) -> bool:
-    """Tell Telegram to fetch and embed a video by URL (no local download needed)."""
+    """Ask Telegram to fetch a video by URL."""
     def _send():
         payload = {
             "chat_id":            TELEGRAM_CHAT_ID,
@@ -167,7 +188,7 @@ def send_video_url(url: str, caption: str = "", parse_mode: str = "HTML",
 
     result = _retry(_send)
     if result:
-        log.info("Video URL sent: %s", url[:80])
+        log.info("Video URL sent.")
     time.sleep(RATE_DELAY)
     return bool(result)
 
@@ -176,31 +197,24 @@ def send_media_group(media_items: list[dict], caption: str = "",
                      parse_mode: str = "HTML") -> bool:
     """
     Send an album (up to 10 items).
-
-    Each item in media_items is either:
-      {"type": "photo",  "bytes": b"..."}
-      {"type": "video",  "bytes": b"..."}
-      {"type": "photo",  "url":   "https://..."}
-      {"type": "video",  "url":   "https://..."}
+    Each item: {"type": "photo"|"video", "bytes": b"..."} or {"type": ..., "url": "..."}
     """
     if not media_items:
         return False
 
-    # Cap at 10 (Telegram limit)
     media_items = media_items[:10]
-
-    media_json = []
-    files      = {}
+    media_json  = []
+    files       = {}
 
     for i, item in enumerate(media_items):
-        kind = item.get("type", "photo")
-        entry: dict = {"type": kind}
+        kind  = item.get("type", "photo")
+        entry = {"type": kind}
 
         if "bytes" in item:
-            key = f"media{i}"
-            ext = "mp4" if kind == "video" else "jpg"
+            key  = f"media{i}"
+            ext  = "mp4" if kind == "video" else "jpg"
             mime = "video/mp4" if kind == "video" else "image/jpeg"
-            files[key] = (f"file{i}.{ext}", io.BytesIO(item["bytes"]), mime)
+            files[key]    = (f"file{i}.{ext}", io.BytesIO(item["bytes"]), mime)
             entry["media"] = f"attach://{key}"
             if kind == "video":
                 entry["supports_streaming"] = True
@@ -219,7 +233,7 @@ def send_media_group(media_items: list[dict], caption: str = "",
                 f"{BASE_URL}/sendMediaGroup",
                 data={"chat_id": TELEGRAM_CHAT_ID, "media": json.dumps(media_json)},
                 files=files,
-                timeout=120,
+                timeout=180,
             )
         else:
             r = http_client.post(
@@ -243,53 +257,49 @@ def notify_youtube(
     published_date: str,
     video_url: str,
     channel_name: str = "",
-    thumbnail_url: str = None,
     thumbnail_bytes: bytes = None,
+    thumbnail_url: str = None,
+    video_bytes: bytes = None,
 ) -> bool:
     """
-    Send a YouTube notification.
+    Send a YouTube video notification.
 
-    Strategy (in order):
-      1. If thumbnail bytes available → sendPhoto with caption + link
-      2. If thumbnail URL available  → sendPhoto by URL
-      3. Fallback                    → sendMessage with rich link preview
+    Priority:
+      1. video_bytes available  → sendVideo (fully playable in Telegram)
+      2. thumbnail available    → sendPhoto (rich card preview) + link
+      3. fallback               → sendMessage with link preview
     """
     title_esc   = html_module.escape(video_title)
     channel_esc = html_module.escape(channel_name) if channel_name else ""
 
-    caption = ""
+    caption  = ""
     if channel_esc:
         caption += f"📺 <b>{channel_esc}</b>\n"
     caption += f"🎬 {title_esc}\n"
     caption += f"📅 {published_date}\n"
     caption += f"🔗 <a href='{video_url}'>Watch on YouTube</a>"
 
-    # Try thumbnail upload first (gives rich in-chat preview)
+    # ── 1. Playable video upload ──
+    if video_bytes:
+        log.info("Sending YouTube video as uploadable file (%.1f MB).",
+                 len(video_bytes) / 1024 / 1024)
+        ok = send_video(video_bytes, caption=caption, thumb_bytes=thumbnail_bytes)
+        if ok:
+            return True
+        log.info("Video upload failed, falling back to thumbnail.")
+
+    # ── 2. Thumbnail photo (rich card, user taps link to watch) ──
     if thumbnail_bytes:
         ok = send_photo(thumbnail_bytes, caption=caption)
         if ok:
             return True
 
     if thumbnail_url:
-        def _send_thumb_url():
-            r = http_client.post(
-                f"{BASE_URL}/sendPhoto",
-                json={
-                    "chat_id":    TELEGRAM_CHAT_ID,
-                    "photo":      thumbnail_url,
-                    "caption":    _trunc(caption),
-                    "parse_mode": "HTML",
-                },
-            )
-            r.raise_for_status()
-            return True
-        result = _retry(_send_thumb_url)
-        time.sleep(RATE_DELAY)
-        if result:
-            log.info("YouTube thumbnail photo sent.")
+        ok = send_photo_url(thumbnail_url, caption=caption)
+        if ok:
             return True
 
-    # Final fallback: text message with link preview
+    # ── 3. Text fallback ──
     return send_message(caption, parse_mode="HTML", preview_url=video_url)
 
 
@@ -305,14 +315,10 @@ def notify_tweet(
     """
     Send a tweet notification.
 
-    Priority:
-      - video bytes → sendVideo (upload)
-      - video URL   → sendVideo (URL)
-      - images      → sendPhoto / sendMediaGroup
-      - text only   → sendMessage with link preview
+    Priority: video upload → video URL → images → text+preview
     """
-    acc_esc    = html_module.escape(account_name)
-    tweet_esc  = html_module.escape(tweet_text) if tweet_text else ""
+    acc_esc   = html_module.escape(account_name)
+    tweet_esc = html_module.escape(tweet_text) if tweet_text else ""
 
     caption  = f"🐦 <b>{acc_esc}</b>\n"
     if tweet_esc:
@@ -320,23 +326,22 @@ def notify_tweet(
     caption += f"📅 {published_date}\n"
     caption += f"🔗 <a href='{tweet_url}'>View Tweet</a>"
 
-    # ── Video (uploaded bytes) ──
+    # ── Video upload ──
     if video_bytes:
         ok = send_video(video_bytes, caption=caption)
         if ok:
             return True
-        log.info("Video upload failed, falling back to text.")
+        log.info("Tweet video upload failed, trying URL.")
 
     # ── Video by URL ──
     if video_url:
         ok = send_video_url(video_url, caption=caption)
         if ok:
             return True
-        log.info("Video URL send failed, falling back to text.")
+        log.info("Tweet video URL failed, falling back to images/text.")
 
     # ── Images ──
     if image_bytes_list:
-        # Filter out oversized photos
         valid = [b for b in image_bytes_list if len(b) <= MAX_PHOTO_BYTES]
         if len(valid) == 1:
             return send_photo(valid[0], caption=caption)

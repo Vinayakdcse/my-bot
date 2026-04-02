@@ -1453,3 +1453,101 @@ Current thread 0x00000001edbd58c0 (most recent call first):
 2026-04-02 12:41:41,006 [INFO] apscheduler.scheduler: Added job "check_youtube_channels" to job store "default"
 2026-04-02 12:41:41,006 [INFO] apscheduler.scheduler: Added job "check_twitter" to job store "default"
 2026-04-02 12:41:41,007 [INFO] apscheduler.scheduler: Scheduler started
+2026-04-02 14:42:42,399 [INFO] __main__: ============================================================
+2026-04-02 14:42:42,399 [INFO] __main__:   Notification Bot starting up
+2026-04-02 14:42:42,399 [INFO] __main__: ============================================================
+2026-04-02 14:42:42,405 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-02 14:42:42,405 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-02 14:42:42,405 [INFO] __main__: Scheduler configured. YouTube every 60 min | Twitter every 20 min
+2026-04-02 14:42:42,405 [INFO] __main__: Running initial checks...
+2026-04-02 14:42:42,405 [INFO] youtube_checker: Checking 7 YouTube channel(s)...
+2026-04-02 14:42:42,763 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40HANNAHFOREX&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,770 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40GxTradez&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,772 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40TTrades_edu&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,774 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40Fireship&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,780 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40Mrwhosetheboss&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,781 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40HubermanLabClips&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,799 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40amtrades&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,894 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCQwUEVakiYDmNGe7UBza4sQ&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,904 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCXW7KHt9Esfq1X6ePTHSDjw&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,921 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCqTeFwC8riZWFgXqpDluutg&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,922 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCjrmNkU4Eg6RU_XTWNjQA9A&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,924 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCsBjURrPoezykLs9EqgamOA&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,927 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCkZjTZNvuxq1CYMS3cwZa1Q&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:42,935 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCMiJRAwDNSNzuYeN2uWa0pA&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,365 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUMiJRAwDNSNzuYeN2uWa0pA&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,366 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUXW7KHt9Esfq1X6ePTHSDjw&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,367 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUQwUEVakiYDmNGe7UBza4sQ&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,367 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUsBjURrPoezykLs9EqgamOA&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,367 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUqTeFwC8riZWFgXqpDluutg&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,368 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUjrmNkU4Eg6RU_XTWNjQA9A&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,509 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails%2Csnippet&id=bWAKrdIbyoQ%2CaWBg2cGlWe4&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,516 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails%2Csnippet&id=mBHRPeg8zPU%2Co7NYXvYohYk&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,517 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails%2Csnippet&id=LLuI42YNUko%2CWBwoiMDXT2c&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,518 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails%2Csnippet&id=G-M-ElP1MOE%2CTkyRqgEhl2c&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,523 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails%2Csnippet&id=j40YMyUnZTY%2CaJSK3HZlvnU&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,978 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/G-M-ElP1MOE/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,979 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/mBHRPeg8zPU/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:43,980 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/bWAKrdIbyoQ/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:44,187 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/LLuI42YNUko/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:44,368 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/j40YMyUnZTY/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:44,408 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/aWBg2cGlWe4/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:44,518 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/o7NYXvYohYk/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:44,583 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/WBwoiMDXT2c/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:44,803 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/aJSK3HZlvnU/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:44,815 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails%2Csnippet&id=k8rTG3BgDm8%2CbmB0Py1ADhA&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:45,027 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/TkyRqgEhl2c/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:45,296 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/k8rTG3BgDm8/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:45,593 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUkZjTZNvuxq1CYMS3cwZa1Q&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:45,697 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/bmB0Py1ADhA/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:45,725 [INFO] youtube_checker: New Short: HANNAH FOREX — You're not supposed to have it all figured out... that's why you co-work with the creator.
+2026-04-02 14:42:45,922 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails%2Csnippet&id=BKPR5n3hWWQ%2C5g2Kyc8Ra5U&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 14:42:46,035 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/BKPR5n3hWWQ/maxresdefault.jpg "HTTP/1.1 200 OK"
+2026-04-02 14:42:46,181 [INFO] httpx: HTTP Request: GET https://i.ytimg.com/vi/5g2Kyc8Ra5U/maxresdefault.jpg "HTTP/1.1 200 OK"
+Traceback (most recent call last):
+  File "/Users/v/Documents/doom/youtube_checker.py", line 230, in check_youtube_channels
+    for future in as_completed(futures):
+                  ~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py", line 243, in as_completed
+    waiter.event.wait(wait_timeout)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 659, in wait
+    signaled = self._cond.wait(timeout)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 359, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/v/Documents/doom/main.py", line 97, in <module>
+    main()
+    ~~~~^^
+  File "/Users/v/Documents/doom/main.py", line 77, in main
+    check_youtube_channels()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/v/Documents/doom/youtube_checker.py", line 228, in check_youtube_channels
+    with ThreadPoolExecutor(max_workers=min(len(YOUTUBE_CHANNELS), 10)) as executor:
+         ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py", line 647, in __exit__
+    self.shutdown(wait=True)
+    ~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/thread.py", line 239, in shutdown
+    t.join()
+    ~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 1094, in join
+    self._handle.join(timeout)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^
+KeyboardInterrupt
+Exception ignored on threading shutdown:
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 1536, in _shutdown
+    atexit_call()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 1507, in <lambda>
+    _threading_atexits.append(lambda: func(*arg, **kwargs))
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/thread.py", line 31, in _python_exit
+    t.join()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/threading.py", line 1094, in join
+    self._handle.join(timeout)
+KeyboardInterrupt: 
