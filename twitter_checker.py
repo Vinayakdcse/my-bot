@@ -1,24 +1,22 @@
 """
-twitter_checker.py — Fetch public tweets via Nitter RSS feeds.
+twitter_checker.py - Fetch public tweets via Nitter RSS feeds.
 
-How it works (exactly like YouTube):
-  - Nitter is a public Twitter mirror that exposes RSS for any public account
-  - We GET  https://<nitter-instance>/<username>/rss  — no login, no API key
-  - Parse the XML, extract tweet ID / text / images, send to Telegram
-  - Multiple Nitter instances are tried in order; if one is down the next is used
-
-No Twitter account needed. No credentials. Completely free.
+Changes vs original:
+  - Extracts video URLs from Nitter RSS <enclosure> tags and <video> elements
+  - Passes video_url to notify_tweet() for in-chat video playback
+  - Images and videos handled separately so sendMediaGroup uses correct types
+  - All other logic (Nitter fallback, keyword filter, dedup) unchanged
 """
 
 import logging
 import re
 import xml.etree.ElementTree as ET
 import email.utils
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from html.parser import HTMLParser
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config import TWITTER_ACCOUNTS, TWITTER_KEYWORD_FILTER
 from database import is_tweet_seen, mark_tweet_seen
@@ -27,8 +25,6 @@ from client import http_client
 
 log = logging.getLogger(__name__)
 
-# ── Nitter public instances (tried in order; first healthy one wins) ──────────
-# Updated list — add/remove instances here if any go offline.
 NITTER_INSTANCES = [
     "https://nitter.poast.org",
     "https://nitter.privacydev.net",
@@ -39,39 +35,41 @@ NITTER_INSTANCES = [
     "https://nitter.fdn.fr",
 ]
 
-RSS_TIMEOUT = 12   # seconds per instance attempt
+RSS_TIMEOUT = 12
 
 
-# ── HTML → plain text + image URL extractor ──────────────────────────────────
+# ── HTML parser — extracts text + image URLs + video URLs ────────────────────
 
 class _NitterHTMLParser(HTMLParser):
-    """
-    Nitter wraps tweet content in HTML inside <description><![CDATA[...]]>
-    This parser extracts:
-      - plain text  (from <p> and text nodes)
-      - image URLs  (from <img src="...">)
-    """
-
     def __init__(self, nitter_base: str):
         super().__init__()
         self.nitter_base = nitter_base.rstrip("/")
         self.text_parts: list[str] = []
         self.image_urls: list[str] = []
+        self.video_urls: list[str] = []
         self._in_p = False
 
     def handle_starttag(self, tag: str, attrs: list):
+        attrs_dict = dict(attrs)
+
         if tag == "p":
             self._in_p = True
+
         elif tag == "img":
-            attrs_dict = dict(attrs)
             src = attrs_dict.get("src", "")
             if src:
-                # Nitter serves images via its own proxy (/pic/...)
-                # Convert to absolute URL if relative, then to real Twitter CDN URL
                 if src.startswith("/"):
                     src = self.nitter_base + src
-                real_url = _nitter_pic_to_twitter(src)
-                self.image_urls.append(real_url)
+                self.image_urls.append(_nitter_pic_to_twitter(src))
+
+        elif tag in ("video", "source"):
+            # <video src="..."> or <source src="..." type="video/mp4">
+            src = attrs_dict.get("src", "")
+            if src:
+                if src.startswith("/"):
+                    src = self.nitter_base + src
+                if src not in self.video_urls:
+                    self.video_urls.append(src)
 
     def handle_endtag(self, tag: str):
         if tag == "p":
@@ -89,44 +87,32 @@ class _NitterHTMLParser(HTMLParser):
 
 
 def _nitter_pic_to_twitter(nitter_url: str) -> str:
-    """
-    Convert a Nitter image proxy URL to the real Twitter CDN URL, forcing high quality.
-    """
     try:
         from urllib.parse import urlparse, unquote
-        path = urlparse(nitter_url).path
+        path    = urlparse(nitter_url).path
         decoded = unquote(path.lstrip("/pic/"))
-        
-        # Nitter usually appends :small or :medium; force it to :large for better quality
-        decoded = decoded.replace(":small", ":large").replace(":medium", ":large")
-        decoded = decoded.replace("?name=small", "?name=large").replace("?name=medium", "?name=large")
-        
-        # If it doesn't have a size modifier yet, append :large
-        if decoded.endswith(".jpg") or decoded.endswith(".png"):
+        decoded = (decoded
+                   .replace(":small", ":large")
+                   .replace(":medium", ":large")
+                   .replace("?name=small", "?name=large")
+                   .replace("?name=medium", "?name=large"))
+        if decoded.endswith((".jpg", ".png")):
             decoded += ":large"
-        
-        if decoded.startswith("media/") or decoded.startswith("tweet_video_thumb/"):
+        if decoded.startswith(("media/", "tweet_video_thumb/")):
             return "https://pbs.twimg.com/" + decoded
     except Exception:
         pass
-    
-    # Fallback: use Nitter proxy but still try to ask for large
     return nitter_url.replace("%3Asmall", "%3Alarge").replace(":small", ":large")
 
 
 def _extract_tweet_id(url: str) -> str | None:
-    """Pull the numeric tweet ID out of a Nitter or Twitter status URL."""
     m = re.search(r"/status/(\d+)", url)
     return m.group(1) if m else None
 
 
-# ── RSS fetch with instance fallback ─────────────────────────────────────────
+# ── RSS fetch with instance fallback ────────────────────────────────────────
 
 def _fetch_rss(username: str) -> tuple[str, list[dict]] | None:
-    """
-    Try each Nitter instance until one responds.
-    Returns (nitter_base_url, list_of_tweet_dicts) or None if all fail.
-    """
     for base in NITTER_INSTANCES:
         url = f"{base}/{username}/rss"
         try:
@@ -139,26 +125,19 @@ def _fetch_rss(username: str) -> tuple[str, list[dict]] | None:
             if r.status_code != 200:
                 log.debug("Nitter %s → HTTP %d, trying next", base, r.status_code)
                 continue
-
             tweets = _parse_rss(r.text, base, username)
-            log.info("Nitter instance OK: %s  (%d items)", base, len(tweets))
+            log.info("Nitter OK: %s  (%d items)", base, len(tweets))
             return base, tweets
-
         except httpx.TimeoutException:
             log.debug("Nitter %s timed out, trying next", base)
         except Exception as exc:
             log.debug("Nitter %s error: %s, trying next", base, exc)
 
-    log.error(
-        "All Nitter instances failed for @%s. "
-        "Check https://status.d420.de for live instances.",
-        username,
-    )
+    log.error("All Nitter instances failed for @%s.", username)
     return None
 
 
 def _parse_rss(xml_text: str, nitter_base: str, username: str) -> list[dict]:
-    """Parse Nitter RSS XML and return a list of tweet dicts."""
     tweets = []
     try:
         root = ET.fromstring(xml_text)
@@ -166,47 +145,57 @@ def _parse_rss(xml_text: str, nitter_base: str, username: str) -> list[dict]:
         log.error("RSS XML parse error: %s", exc)
         return []
 
-    ns = {"atom": "http://www.w3.org/2005/Atom"}
-
     for item in root.findall(".//item"):
-        link  = (item.findtext("link")  or "").strip()
-        title = (item.findtext("title") or "").strip()
-        desc  = (item.findtext("description") or "").strip()
-        pub_date = (item.findtext("pubDate") or "").strip()
+        link     = (item.findtext("link")        or "").strip()
+        title    = (item.findtext("title")       or "").strip()
+        desc     = (item.findtext("description") or "").strip()
+        pub_date = (item.findtext("pubDate")     or "").strip()
 
         tweet_id = _extract_tweet_id(link)
         if not tweet_id:
             continue
 
-        # Skip pinned-tweet markers some instances add
-        if "#m" in link:
-            link = link.replace("#m", "")
+        link = link.replace("#m", "")
 
-        # Parse HTML description → plain text + images
+        # Parse HTML → text + images + videos
         parser = _NitterHTMLParser(nitter_base)
         parser.feed(desc)
 
-        # Nitter puts "RT @someone: ..." or "R to @someone: ..." in the title
-        # to mark retweets/replies. We keep that signal to optionally filter.
+        # Also check <enclosure> for video/audio attachments
+        enclosure = item.find("enclosure")
+        enclosure_url = None
+        if enclosure is not None:
+            enc_type = enclosure.get("type", "")
+            enc_url  = enclosure.get("url", "")
+            if "video" in enc_type and enc_url:
+                enclosure_url = enc_url
+                if enc_url not in parser.video_urls:
+                    parser.video_urls.append(enc_url)
+
         is_retweet = title.startswith("RT @")
         is_reply   = title.startswith("R to @")
 
-        # Build the canonical Twitter URL (not Nitter URL)
         tweet_url = f"https://twitter.com/{username}/status/{tweet_id}"
 
-        # Parse Date
+        # Format date
         try:
-            dt = email.utils.parsedate_to_datetime(pub_date)
+            dt     = email.utils.parsedate_to_datetime(pub_date)
             tz_ist = timezone(timedelta(hours=5, minutes=30))
-            formatted_date = dt.astimezone(tz_ist).strftime("%d/%m/%Y %I:%M %p GMT +5:30").replace(" AM", " am").replace(" PM", " pm")
+            formatted_date = (
+                dt.astimezone(tz_ist)
+                .strftime("%d/%m/%Y %I:%M %p GMT +5:30")
+                .replace(" AM", " am")
+                .replace(" PM", " pm")
+            )
         except Exception:
-            formatted_date = pub_date if pub_date else "Unknown date"
+            formatted_date = pub_date or "Unknown date"
 
         tweets.append({
             "tweet_id":   tweet_id,
             "tweet_url":  tweet_url,
             "text":       parser.text,
             "image_urls": parser.image_urls,
+            "video_urls": parser.video_urls,   # NEW
             "is_retweet": is_retweet,
             "is_reply":   is_reply,
             "published_at": formatted_date,
@@ -215,7 +204,7 @@ def _parse_rss(xml_text: str, nitter_base: str, username: str) -> list[dict]:
     return tweets
 
 
-# ── Image downloader ──────────────────────────────────────────────────────────
+# ── Media downloaders ────────────────────────────────────────────────────────
 
 def _download_images(urls: list[str]) -> list[bytes]:
     images = []
@@ -224,13 +213,35 @@ def _download_images(urls: list[str]) -> list[bytes]:
             r = http_client.get(url, timeout=20, follow_redirects=True)
             r.raise_for_status()
             images.append(r.content)
-            log.debug("Downloaded image (%d bytes): %s", len(r.content), url[:80])
+            log.debug("Image downloaded (%d bytes)", len(r.content))
         except Exception as exc:
-            log.warning("Failed to download image %s: %s", url, exc)
+            log.warning("Image download failed %s: %s", url[:80], exc)
     return images
 
 
-# ── Keyword filter ────────────────────────────────────────────────────────────
+def _download_video(url: str) -> bytes | None:
+    """Download a tweet video. Returns None if too large or failed."""
+    MAX_VIDEO_DOWNLOAD_MB = 45
+    try:
+        # HEAD request to check size first
+        head = http_client.head(url, timeout=10, follow_redirects=True)
+        content_length = int(head.headers.get("content-length", 0))
+        if content_length > MAX_VIDEO_DOWNLOAD_MB * 1024 * 1024:
+            log.info(
+                "Video too large (%.1f MB), will send URL instead.",
+                content_length / 1024 / 1024,
+            )
+            return None
+        r = http_client.get(url, timeout=60, follow_redirects=True)
+        r.raise_for_status()
+        log.debug("Video downloaded (%d bytes)", len(r.content))
+        return r.content
+    except Exception as exc:
+        log.warning("Video download failed %s: %s", url[:80], exc)
+        return None
+
+
+# ── Keyword filter ───────────────────────────────────────────────────────────
 
 def _passes_keyword_filter(text: str) -> bool:
     if not TWITTER_KEYWORD_FILTER:
@@ -239,66 +250,75 @@ def _passes_keyword_filter(text: str) -> bool:
     return not any(kw.lower() in text_lower for kw in TWITTER_KEYWORD_FILTER)
 
 
-# ── Main check (called by scheduler) ─────────────────────────────────────────
+# ── Per-account processor ────────────────────────────────────────────────────
 
 def _process_account(account: str) -> None:
     log.info("Checking Twitter/Nitter for @%s...", account)
 
     result = _fetch_rss(account)
     if result is None:
-        return   # all instances down — will retry next poll cycle
-
-    _nitter_base, tweets = result
-
-    if not tweets:
-        log.info("No tweets found in RSS feed for @%s", account)
         return
 
-    # Only process the 3 most recent tweets
-    tweets = tweets[:3]
+    _nitter_base, tweets = result
+    if not tweets:
+        log.info("No tweets found for @%s", account)
+        return
 
-    # Process oldest → newest so Telegram messages arrive in chronological order
-    for tweet in reversed(tweets):
+    for tweet in reversed(tweets[:3]):   # oldest first, max 3
         tweet_id = tweet["tweet_id"]
 
-        # Skip retweets (change False → True to include them)
         if tweet["is_retweet"]:
-            mark_tweet_seen(tweet_id)   # mark to avoid rechecking
+            mark_tweet_seen(tweet_id)
             continue
 
         if is_tweet_seen(tweet_id):
             continue
 
-        # Keyword filter
         if not _passes_keyword_filter(tweet["text"]):
-            log.debug("Tweet %s skipped by keyword filter", tweet_id)
+            log.debug("Tweet %s filtered by keyword", tweet_id)
             mark_tweet_seen(tweet_id)
             continue
 
-        # Download images
+        # ── Media resolution ──────────────────────────────────────────────
+        video_bytes = None
+        video_url   = None
+
+        if tweet["video_urls"]:
+            first_video = tweet["video_urls"][0]
+            video_bytes = _download_video(first_video)
+            if video_bytes is None:
+                # Too large → pass URL so Telegram fetches it
+                video_url = first_video
+
         image_bytes = _download_images(tweet["image_urls"]) if tweet["image_urls"] else []
 
         log.info(
-            "New tweet @%s (images=%d reply=%s): %s",
+            "New tweet @%s | video=%s | images=%d | reply=%s | %s",
             account,
+            "bytes" if video_bytes else ("url" if video_url else "none"),
             len(image_bytes),
             tweet["is_reply"],
             tweet["text"][:80],
         )
 
         success = notify_tweet(
-            account_name=f"@{account}",
-            tweet_text=tweet["text"],
-            tweet_url=tweet["tweet_url"],
-            published_date=tweet["published_at"],
-            image_bytes_list=image_bytes or None,
+            account_name     = f"@{account}",
+            tweet_text       = tweet["text"],
+            tweet_url        = tweet["tweet_url"],
+            published_date   = tweet["published_at"],
+            image_bytes_list = image_bytes or None,
+            video_bytes      = video_bytes,
+            video_url        = video_url,
         )
 
         if success:
             mark_tweet_seen(tweet_id)
 
+
+# ── Public entry point ───────────────────────────────────────────────────────
+
 def check_twitter() -> None:
-    """Poll Nitter RSS for new tweets and send Telegram notifications in parallel."""
+    """Poll Nitter RSS for new tweets and send Telegram notifications."""
     if not TWITTER_ACCOUNTS:
         return
 
@@ -308,4 +328,4 @@ def check_twitter() -> None:
             try:
                 future.result()
             except Exception as e:
-                log.error("Exception in twitter account worker: %s", e)
+                log.error("Exception in twitter worker: %s", e)
