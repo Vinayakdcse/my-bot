@@ -6,7 +6,8 @@ def main() -> None:
     _validate_config()
     init_db()
 
-    # ✅ use existing scheduler (DON’T redefine)
+    # ✅ Define scheduler HERE inside main()
+    scheduler = BlockingScheduler(timezone="UTC")
 
     scheduler.add_job(
         check_youtube_channels,
@@ -35,4 +36,7 @@ def main() -> None:
     check_youtube_channels()
     check_twitter()
 
-    scheduler.start()
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        log.info("Bot stopped by user.")
