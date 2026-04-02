@@ -103,3 +103,26 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+from flask import Flask
+import threading
+import os
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running ✅"
+
+
+def run_bot():
+    main()
+
+
+if __name__ == "__main__":
+    # Run bot in background
+    threading.Thread(target=run_bot).start()
+
+    # Run web server (main thread)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
