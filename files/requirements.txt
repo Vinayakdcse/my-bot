@@ -1,0 +1,10 @@
+# Core
+apscheduler==3.10.4
+httpx==0.27.0
+python-dotenv==1.0.1
+
+# YouTube
+google-api-python-client==2.131.0
+
+# Twitter/X — uses Nitter RSS (public, no login needed)
+# No extra packages needed — uses httpx (above) + Python stdlib xml parser
