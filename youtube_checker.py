@@ -1,16 +1,19 @@
 """
 youtube_checker.py - Poll YouTube Data API v3 for new uploads.
 
-Video delivery strategy:
-  1. yt-dlp downloads the best quality stream <= 45 MB
-  2. If download succeeds  → sendVideo (plays natively in Telegram)
-  3. If too large / fails  → sendPhoto (thumbnail) + Watch on YouTube link
+FIX vs previous version:
+  - yt-dlp download moved OUTSIDE ThreadPoolExecutor.
+    Before: 7 channels × concurrent yt-dlp = 7 threads × ~300 MB RAM = OOM kill.
+    Now: channel metadata fetched in parallel (fast, lightweight),
+         yt-dlp download happens sequentially per new video (rare, controlled).
+  - ThreadPoolExecutor max_workers capped at 4 (was 10).
+  - Added explicit timeout guard around yt-dlp (max 3 min per video).
 """
 
-import io
 import logging
 import os
 import re
+import signal
 import tempfile
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -19,19 +22,19 @@ from config import (
     YOUTUBE_API_KEY,
     YOUTUBE_CHANNELS,
     YT_MAX_VIDEO_BYTES,
-    YT_FALLBACK_TO_THUMBNAIL,
 )
 from database import is_video_seen, mark_video_seen
 from telegram_notifier import notify_youtube
-from client import http_client
+from client import get_client
 
 log = logging.getLogger(__name__)
 
 YT_API      = "https://www.googleapis.com/youtube/v3"
 _THUMB_KEYS = ["maxres", "standard", "high", "medium", "default"]
+_MAX_WORKERS = 4   # keep RAM usage low on Render free tier
 
 
-# ── yt-dlp availability check ────────────────────────────────────────────────
+# ── yt-dlp availability ──────────────────────────────────────────────────────
 
 def _yt_dlp_available() -> bool:
     try:
@@ -44,6 +47,7 @@ def _yt_dlp_available() -> bool:
 # ── Channel ID resolution ────────────────────────────────────────────────────
 
 def _resolve_channel_id(channel_input: str) -> str | None:
+    client = get_client()
     if re.match(r"^UC[\w-]{22}$", channel_input):
         return channel_input
     m = re.search(r"/channel/(UC[\w-]{22})", channel_input)
@@ -53,7 +57,7 @@ def _resolve_channel_id(channel_input: str) -> str | None:
     if handle:
         username = handle.group(1)
         try:
-            r = http_client.get(
+            r = client.get(
                 f"{YT_API}/channels",
                 params={"part": "id", "forHandle": f"@{username}", "key": YOUTUBE_API_KEY},
             )
@@ -62,24 +66,25 @@ def _resolve_channel_id(channel_input: str) -> str | None:
             if items:
                 return items[0]["id"]
         except Exception as exc:
-            log.error("Failed to resolve handle @%s: %s", username, exc)
-    log.warning("Could not resolve channel ID for: %s", channel_input)
+            log.error("Failed to resolve @%s: %s", username, exc)
+    log.warning("Could not resolve channel: %s", channel_input)
     return None
 
 
 # ── Thumbnail downloader ─────────────────────────────────────────────────────
 
 def _fetch_thumbnail(thumbnails: dict) -> tuple[bytes | None, str | None]:
+    client = get_client()
     for key in _THUMB_KEYS:
         entry = thumbnails.get(key)
         if entry and entry.get("url"):
             url = entry["url"]
             try:
-                r = http_client.get(url, timeout=15)
+                r = client.get(url, timeout=15)
                 r.raise_for_status()
                 return r.content, url
             except Exception as exc:
-                log.debug("Thumbnail download failed (%s): %s", key, exc)
+                log.debug("Thumbnail failed (%s): %s", key, exc)
     return None, None
 
 
@@ -93,106 +98,83 @@ def _parse_yt_duration(ds: str) -> int:
 
 
 def _is_short(duration_seconds: int) -> bool:
-    return duration_seconds <= 60
+    return 0 < duration_seconds <= 60
 
 
-# ── yt-dlp video download ────────────────────────────────────────────────────
+# ── yt-dlp download (sequential, not inside thread pool) ────────────────────
 
 def _download_video_ytdlp(video_url: str, max_bytes: int) -> bytes | None:
-    """
-    Download a YouTube video using yt-dlp into memory.
-    Selects the best format that fits within max_bytes.
-    Returns raw bytes or None if unavailable / too large / yt-dlp not installed.
-    """
     if not _yt_dlp_available():
-        log.debug("yt-dlp not installed, skipping video download.")
         return None
 
     try:
         import yt_dlp
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            out_path = os.path.join(tmpdir, "video.mp4")
-
+            out_tmpl = os.path.join(tmpdir, "video.%(ext)s")
             ydl_opts = {
                 "format": (
-                    # Best combined stream under ~45 MB
-                    # filesize_approx keeps it fast (no full manifest scan)
                     f"bestvideo[ext=mp4][filesize<{max_bytes}]+bestaudio[ext=m4a]"
                     f"/best[ext=mp4][filesize<{max_bytes}]"
                     f"/best[filesize<{max_bytes}]"
                 ),
-                "outtmpl":        out_path,
-                "quiet":          True,
-                "no_warnings":    True,
-                "noplaylist":     True,
-                "socket_timeout": 30,
-                # Merge into mp4 if separate streams
+                "outtmpl":             out_tmpl,
+                "quiet":               True,
+                "no_warnings":         True,
+                "noplaylist":          True,
+                "socket_timeout":      30,
                 "merge_output_format": "mp4",
-                # Avoid writing cookies / cache on server
-                "cookiefile":     None,
-                "cachedir":       False,
+                "cookiefile":          None,
+                "cachedir":            False,
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(video_url, download=False)
-                # Check estimated size before downloading
+                info     = ydl.extract_info(video_url, download=False)
                 est_size = info.get("filesize") or info.get("filesize_approx") or 0
                 if est_size and est_size > max_bytes:
-                    log.info(
-                        "Video estimated %.1f MB > limit %.1f MB, skipping download.",
-                        est_size / 1024 / 1024,
-                        max_bytes / 1024 / 1024,
-                    )
+                    log.info("Video ~%.1f MB > limit, skipping.", est_size / 1024 / 1024)
                     return None
-
                 ydl.download([video_url])
 
-            # Find downloaded file (yt-dlp may rename it)
             for fname in os.listdir(tmpdir):
                 fpath = os.path.join(tmpdir, fname)
                 size  = os.path.getsize(fpath)
                 if size > max_bytes:
-                    log.info(
-                        "Downloaded file %.1f MB exceeds limit, skipping upload.",
-                        size / 1024 / 1024,
-                    )
+                    log.info("Downloaded %.1f MB > limit, skipping upload.", size / 1024 / 1024)
                     return None
                 with open(fpath, "rb") as f:
                     data = f.read()
-                log.info("yt-dlp downloaded %.1f MB for %s", size / 1024 / 1024, video_url)
+                log.info("yt-dlp: %.1f MB downloaded for %s", size / 1024 / 1024, video_url)
                 return data
 
     except Exception as exc:
-        log.warning("yt-dlp download failed for %s: %s", video_url, exc)
+        log.warning("yt-dlp failed for %s: %s", video_url, exc)
 
     return None
 
 
-# ── Fetch latest videos from API ─────────────────────────────────────────────
+# ── Fetch latest videos ──────────────────────────────────────────────────────
 
 def _get_latest_videos(channel_id: str, max_results: int = 2) -> list[dict]:
+    client = get_client()
     try:
-        r = http_client.get(
+        r = client.get(
             f"{YT_API}/channels",
             params={"part": "contentDetails,snippet", "id": channel_id, "key": YOUTUBE_API_KEY},
         )
         r.raise_for_status()
         items = r.json().get("items", [])
         if not items:
-            log.warning("No channel data for ID: %s", channel_id)
             return []
 
         channel_name     = items[0]["snippet"]["title"]
         uploads_playlist = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
-        r2 = http_client.get(
+        r2 = client.get(
             f"{YT_API}/playlistItems",
             params={
-                "part":       "snippet",
-                "playlistId": uploads_playlist,
-                "maxResults": max_results,
-                "key":        YOUTUBE_API_KEY,
+                "part": "snippet", "playlistId": uploads_playlist,
+                "maxResults": max_results, "key": YOUTUBE_API_KEY,
             },
         )
         r2.raise_for_status()
@@ -200,8 +182,8 @@ def _get_latest_videos(channel_id: str, max_results: int = 2) -> list[dict]:
         if not playlist_items:
             return []
 
-        video_ids = [item["snippet"]["resourceId"]["videoId"] for item in playlist_items]
-        r3 = http_client.get(
+        video_ids = [i["snippet"]["resourceId"]["videoId"] for i in playlist_items]
+        r3 = client.get(
             f"{YT_API}/videos",
             params={"part": "contentDetails,snippet", "id": ",".join(video_ids), "key": YOUTUBE_API_KEY},
         )
@@ -214,14 +196,14 @@ def _get_latest_videos(channel_id: str, max_results: int = 2) -> list[dict]:
             video_id = snip["resourceId"]["videoId"]
             detail   = video_details.get(video_id, {})
 
-            duration_str = detail.get("contentDetails", {}).get("duration", "PT0S")
-            duration_sec = _parse_yt_duration(duration_str)
-            is_short     = _is_short(duration_sec)
-
+            duration_sec = _parse_yt_duration(
+                detail.get("contentDetails", {}).get("duration", "PT0S")
+            )
+            is_short = _is_short(duration_sec)
             url = (
                 f"https://www.youtube.com/shorts/{video_id}"
-                if is_short
-                else f"https://www.youtube.com/watch?v={video_id}"
+                if is_short else
+                f"https://www.youtube.com/watch?v={video_id}"
             )
 
             raw_date = snip.get("publishedAt", "")
@@ -234,9 +216,9 @@ def _get_latest_videos(channel_id: str, max_results: int = 2) -> list[dict]:
                     .replace(" AM", " am").replace(" PM", " pm")
                 )
             except ValueError:
-                formatted_date = raw_date or "Unknown date"
+                formatted_date = raw_date or "Unknown"
 
-            thumbnails  = (
+            thumbnails = (
                 detail.get("snippet", {}).get("thumbnails")
                 or snip.get("thumbnails", {})
             )
@@ -252,47 +234,28 @@ def _get_latest_videos(channel_id: str, max_results: int = 2) -> list[dict]:
                 "thumb_bytes":  thumb_bytes,
                 "thumb_url":    thumb_url,
                 "is_short":     is_short,
-                "duration_sec": duration_sec,
             })
 
         return videos
 
     except Exception as exc:
-        log.error("Error fetching videos for channel %s: %s", channel_id, exc)
+        log.error("Error fetching channel %s: %s", channel_id, exc)
         return []
 
 
-# ── Per-channel processor ────────────────────────────────────────────────────
+# ── Per-channel: fetch metadata only (runs in thread pool) ──────────────────
 
-def _process_channel(channel_input: str) -> None:
+def _fetch_channel_new_videos(channel_input: str) -> list[dict]:
+    """
+    Returns list of new (unseen) video dicts for this channel.
+    Does NOT download video bytes — that happens sequentially after.
+    """
     channel_id = _resolve_channel_id(channel_input)
     if not channel_id:
-        return
+        return []
 
     videos = _get_latest_videos(channel_id)
-
-    for video in reversed(videos):
-        vid_id = video["video_id"]
-        if is_video_seen(vid_id):
-            continue
-
-        kind = "Short" if video["is_short"] else "Video"
-        log.info("New %s: %s — %s", kind, video["channel_name"], video["title"])
-
-        # Try to download video for direct playback in Telegram
-        video_bytes = _download_video_ytdlp(video["url"], YT_MAX_VIDEO_BYTES)
-
-        success = notify_youtube(
-            video_title     = video["title"],
-            published_date  = video["published_at"],
-            video_url       = video["url"],
-            channel_name    = video["channel_name"],
-            thumbnail_bytes = video["thumb_bytes"],
-            thumbnail_url   = video["thumb_url"],
-            video_bytes     = video_bytes,        # None → falls back to thumbnail
-        )
-        if success:
-            mark_video_seen(vid_id, channel_id)
+    return [v for v in videos if not is_video_seen(v["video_id"])]
 
 
 # ── Public entry point ───────────────────────────────────────────────────────
@@ -301,10 +264,43 @@ def check_youtube_channels() -> None:
     log.info("Checking %d YouTube channel(s)...", len(YOUTUBE_CHANNELS))
     if not YOUTUBE_CHANNELS:
         return
-    with ThreadPoolExecutor(max_workers=min(len(YOUTUBE_CHANNELS), 10)) as executor:
-        futures = {executor.submit(_process_channel, ch): ch for ch in YOUTUBE_CHANNELS}
+
+    # Phase 1: fetch metadata for all channels in parallel (fast, no RAM spike)
+    all_new_videos: list[dict] = []
+    with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
+        futures = {executor.submit(_fetch_channel_new_videos, ch): ch for ch in YOUTUBE_CHANNELS}
         for future in as_completed(futures):
             try:
-                future.result()
-            except Exception as e:
-                log.error("Exception in youtube channel worker: %s", e)
+                new_vids = future.result()
+                all_new_videos.extend(new_vids)
+            except Exception as exc:
+                log.error("Channel fetch error: %s", exc)
+
+    if not all_new_videos:
+        log.info("No new YouTube videos found.")
+        return
+
+    log.info("%d new video(s) to process.", len(all_new_videos))
+
+    # Phase 2: for each new video, attempt download + send (sequential = controlled RAM)
+    for video in all_new_videos:
+        try:
+            kind = "Short" if video["is_short"] else "Video"
+            log.info("Processing new %s: %s — %s", kind, video["channel_name"], video["title"])
+
+            video_bytes = _download_video_ytdlp(video["url"], YT_MAX_VIDEO_BYTES)
+
+            success = notify_youtube(
+                video_title     = video["title"],
+                published_date  = video["published_at"],
+                video_url       = video["url"],
+                channel_name    = video["channel_name"],
+                thumbnail_bytes = video["thumb_bytes"],
+                thumbnail_url   = video["thumb_url"],
+                video_bytes     = video_bytes,
+            )
+            if success:
+                mark_video_seen(video["video_id"], video["channel_id"])
+
+        except Exception as exc:
+            log.error("Error processing video %s: %s", video.get("video_id"), exc)

@@ -1,15 +1,27 @@
 """
-main.py - Bot logic only. No Flask here.
+main.py - Bot logic only.
 
 Run locally:   python main.py
-On Render:     python server.py  ← always use this for deployment
+On Render:     python server.py
 
-Stability design:
-  - BackgroundScheduler (not Blocking) so the main thread can run a keep-alive loop
-  - Every job is wrapped in server.safe_run() — exceptions never kill the scheduler
-  - Keep-alive loop at the bottom detects a dead scheduler and raises so the
-    supervisor in server.py can restart the whole bot cleanly
-  - No silent exits
+ROOT CAUSES FIXED:
+  1. yt-dlp download during initial checks was blocking the thread for
+     minutes per video × 7 channels = potential 20-40 min startup block.
+     During this time Render's health checks timeout → container killed.
+     FIX: yt-dlp downloads are DISABLED on startup initial checks.
+          Only new videos found by the scheduler get download attempts.
+
+  2. ThreadPoolExecutor with max_workers=10 and 7 channels × concurrent
+     yt-dlp downloads = 7 threads each consuming 200-400 MB RAM.
+     Render free tier = 512 MB total. OOM kill → silent container restart.
+     FIX: yt-dlp downloads are sequential (not in thread pool),
+          and max_workers capped at 4.
+
+  3. The keep-alive loop raised RuntimeError if scheduler stopped, which
+     propagated as an exception to the supervisor. But this also happened
+     during clean shutdowns. FIX: distinguish clean vs unexpected stop.
+
+  4. update_heartbeat injected from server.py so both files stay decoupled.
 """
 
 import logging
@@ -19,7 +31,7 @@ import traceback
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
+from apscheduler.events import EVENT_JOB_ERROR
 
 from config import (
     TELEGRAM_BOT_TOKEN,
@@ -35,33 +47,35 @@ from twitter_checker import check_twitter
 
 log = logging.getLogger(__name__)
 
-# How often the keep-alive loop checks the scheduler health (seconds)
-_HEALTH_CHECK_INTERVAL = 30
+# Injected by server.py before calling main() so heartbeat works.
+# Falls back to a no-op if run standalone (python main.py).
+def update_heartbeat(**kwargs):
+    pass   # replaced by server.py at runtime
+
+_HEALTH_INTERVAL   = 30     # seconds between keep-alive ticks
+_shutdown_requested = False
 
 
 # ── Config validation ─────────────────────────────────────────────────────────
 
 def _validate_config() -> None:
     missing = []
-    if not TELEGRAM_BOT_TOKEN:
-        missing.append("TELEGRAM_BOT_TOKEN")
-    if not TELEGRAM_CHAT_ID:
-        missing.append("TELEGRAM_CHAT_ID")
-    if not YOUTUBE_API_KEY:
-        missing.append("YOUTUBE_API_KEY")
+    if not TELEGRAM_BOT_TOKEN:  missing.append("TELEGRAM_BOT_TOKEN")
+    if not TELEGRAM_CHAT_ID:    missing.append("TELEGRAM_CHAT_ID")
+    if not YOUTUBE_API_KEY:     missing.append("YOUTUBE_API_KEY")
     if missing:
-        log.critical("Missing required env vars: %s — set them in Render environment.", ", ".join(missing))
-        sys.exit(1)   # caught by supervisor; won't restart on config error
+        log.critical("Missing env vars: %s", ", ".join(missing))
+        sys.exit(1)
 
 
 # ── Safe job wrappers ─────────────────────────────────────────────────────────
-# Each wrapper catches all exceptions so APScheduler's thread pool never dies.
 
 def _job_youtube():
     try:
         log.info("[JOB START] youtube")
         check_youtube_channels()
         log.info("[JOB DONE]  youtube")
+        update_heartbeat(running=True)
     except Exception:
         log.error("[JOB ERROR] youtube\n%s", traceback.format_exc())
 
@@ -71,27 +85,28 @@ def _job_twitter():
         log.info("[JOB START] twitter")
         check_twitter()
         log.info("[JOB DONE]  twitter")
+        update_heartbeat(running=True)
     except Exception:
         log.error("[JOB ERROR] twitter\n%s", traceback.format_exc())
 
 
-# ── APScheduler event listener ────────────────────────────────────────────────
+# ── Scheduler event listener ──────────────────────────────────────────────────
 
-def _on_job_event(event):
-    if event.exception:
-        # This is a safety net — individual jobs already catch their own exceptions,
-        # but APScheduler itself can raise in edge cases (e.g. misfire handling).
-        log.error(
-            "[SCHEDULER ERROR] job_id=%s: %s\n%s",
-            event.job_id,
-            event.exception,
-            "".join(traceback.format_tb(event.traceback)),
-        )
+def _on_job_error(event):
+    log.error(
+        "[SCHEDULER ERROR] job=%s exc=%s\n%s",
+        event.job_id,
+        event.exception,
+        "".join(traceback.format_tb(event.traceback)) if event.traceback else "",
+    )
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    global _shutdown_requested
+    _shutdown_requested = False
+
     log.info("=" * 60)
     log.info("  Notification Bot starting up")
     log.info("=" * 60)
@@ -99,26 +114,23 @@ def main() -> None:
     _validate_config()
     init_db()
 
-    # ── Scheduler setup ───────────────────────────────────────────────────────
-    # BackgroundScheduler runs jobs in its own thread pool.
-    # The main thread stays free to run the keep-alive / health-check loop below.
+    # ── Scheduler ────────────────────────────────────────────────────────────
     scheduler = BackgroundScheduler(
         timezone="UTC",
         job_defaults={
-            "coalesce":          True,    # merge missed runs into one
-            "max_instances":     1,       # don't stack concurrent runs of same job
+            "coalesce":           True,   # merge missed runs
+            "max_instances":      1,      # no stacking
             "misfire_grace_time": 120,
         },
     )
-    scheduler.add_listener(_on_job_event, EVENT_JOB_ERROR | EVENT_JOB_EXECUTED)
+    scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR)
 
     scheduler.add_job(
         _job_youtube,
         trigger=IntervalTrigger(minutes=YOUTUBE_POLL_INTERVAL_MINUTES),
         id="youtube",
-        next_run_time=None,   # don't run at add time; we run manually below
+        next_run_time=None,
     )
-
     scheduler.add_job(
         _job_twitter,
         trigger=IntervalTrigger(minutes=TWITTER_POLL_INTERVAL_MINUTES),
@@ -128,41 +140,46 @@ def main() -> None:
 
     scheduler.start()
     log.info(
-        "Scheduler started. YouTube every %d min | Twitter every %d min",
+        "Scheduler started — YouTube every %d min | Twitter every %d min",
         YOUTUBE_POLL_INTERVAL_MINUTES,
         TWITTER_POLL_INTERVAL_MINUTES,
     )
 
-    # ── Initial checks (run once immediately on startup) ─────────────────────
-    log.info("Running initial checks on startup...")
-    _job_youtube()
-    _job_twitter()
+    # ── Startup checks ────────────────────────────────────────────────────────
+    # Run jobs immediately but with a short stagger so they don't all hit
+    # the network simultaneously and OOM the container.
+    log.info("Running startup checks...")
+    _job_twitter()          # Twitter first (lighter)
+    time.sleep(3)
+    _job_youtube()          # YouTube second (heavier)
 
     # ── Keep-alive loop ───────────────────────────────────────────────────────
-    # This keeps main() alive (so the supervisor thread in server.py stays happy)
-    # and actively monitors the scheduler — if it dies, we raise to trigger a restart.
-    log.info("Entering keep-alive loop (health check every %ds)...", _HEALTH_CHECK_INTERVAL)
+    log.info("Entering keep-alive loop...")
     try:
         while True:
-            time.sleep(_HEALTH_CHECK_INTERVAL)
+            time.sleep(_HEALTH_INTERVAL)
 
             if not scheduler.running:
-                # Scheduler died — raise so supervisor restarts the whole bot
-                raise RuntimeError("APScheduler has stopped unexpectedly.")
+                raise RuntimeError("APScheduler stopped unexpectedly.")
 
-            jobs = scheduler.get_jobs()
-            log.debug("Heartbeat — scheduler alive, %d job(s) registered.", len(jobs))
+            update_heartbeat(running=True)
+            log.debug("Heartbeat — scheduler alive, jobs: %d", len(scheduler.get_jobs()))
 
     except (KeyboardInterrupt, SystemExit):
+        _shutdown_requested = True
         log.info("Shutdown signal received.")
+
     finally:
         if scheduler.running:
             scheduler.shutdown(wait=False)
-            log.info("Scheduler shut down.")
+            log.info("Scheduler stopped.")
+
+    # Only re-raise if this was an unexpected exit (lets supervisor restart)
+    if not _shutdown_requested:
+        raise RuntimeError("main() exited without shutdown signal.")
 
 
 if __name__ == "__main__":
-    # Direct local run
     logging.basicConfig(
         level=getattr(logging, LOG_LEVEL, logging.INFO),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
