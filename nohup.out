@@ -1394,3 +1394,62 @@ Current thread 0x00000001edbd58c0 (most recent call first):
 2026-04-02 11:39:34,130 [INFO] apscheduler.scheduler: Added job "check_youtube_channels" to job store "default"
 2026-04-02 11:39:34,131 [INFO] apscheduler.scheduler: Added job "check_twitter" to job store "default"
 2026-04-02 11:39:34,131 [INFO] apscheduler.scheduler: Scheduler started
+2026-04-02 12:41:19,833 [INFO] __main__: ============================================================
+2026-04-02 12:41:19,833 [INFO] __main__:   Notification Bot starting up
+2026-04-02 12:41:19,833 [INFO] __main__: ============================================================
+2026-04-02 12:41:19,842 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-02 12:41:19,842 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-02 12:41:19,842 [INFO] __main__: Scheduler started. YouTube every 60 min | Twitter every 20 min
+2026-04-02 12:41:22,848 [INFO] __main__: Running initial checks...
+2026-04-02 12:41:22,848 [INFO] youtube_checker: Checking 7 YouTube channel(s)...
+2026-04-02 12:41:23,347 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40TTrades_edu&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,354 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40amtrades&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,354 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40Fireship&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,362 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40GxTradez&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,362 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40HubermanLabClips&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,370 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40Mrwhosetheboss&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,373 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=%40HANNAHFOREX&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,478 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCsBjURrPoezykLs9EqgamOA&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,489 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCkZjTZNvuxq1CYMS3cwZa1Q&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,501 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCqTeFwC8riZWFgXqpDluutg&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,506 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCMiJRAwDNSNzuYeN2uWa0pA&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,512 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCXW7KHt9Esfq1X6ePTHSDjw&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,536 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCQwUEVakiYDmNGe7UBza4sQ&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,587 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/channels?part=contentDetails%2Csnippet&id=UCjrmNkU4Eg6RU_XTWNjQA9A&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,868 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUMiJRAwDNSNzuYeN2uWa0pA&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,869 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUqTeFwC8riZWFgXqpDluutg&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,870 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUsBjURrPoezykLs9EqgamOA&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,878 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUXW7KHt9Esfq1X6ePTHSDjw&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:23,912 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUQwUEVakiYDmNGe7UBza4sQ&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:24,004 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=mBHRPeg8zPU%2Co7NYXvYohYk&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:24,015 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=bmB0Py1ADhA%2C0TfYyDtRt-Y&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:24,015 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=j40YMyUnZTY%2CaJSK3HZlvnU&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:24,022 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=G-M-ElP1MOE%2CTkyRqgEhl2c&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:24,045 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=LLuI42YNUko%2CWBwoiMDXT2c&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:24,055 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUjrmNkU4Eg6RU_XTWNjQA9A&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:24,207 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=UUkZjTZNvuxq1CYMS3cwZa1Q&maxResults=2&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:24,220 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=bWAKrdIbyoQ%2CaWBg2cGlWe4&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:24,491 [INFO] httpx: HTTP Request: GET https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=BKPR5n3hWWQ%2C5g2Kyc8Ra5U&key=AIzaSyCocZpHo3BEw6iSrRfGxoVYmLbbOyxPnbA "HTTP/1.1 200 OK"
+2026-04-02 12:41:24,499 [INFO] twitter_checker: Checking Twitter/Nitter for @GxTradez...
+2026-04-02 12:41:24,499 [INFO] twitter_checker: Checking Twitter/Nitter for @TTrades_edu...
+2026-04-02 12:41:24,499 [INFO] twitter_checker: Checking Twitter/Nitter for @_amtrades...
+2026-04-02 12:41:24,500 [INFO] twitter_checker: Checking Twitter/Nitter for @OTT_Trackers...
+2026-04-02 12:41:26,435 [INFO] httpx: HTTP Request: GET https://nitter.poast.org/GxTradez/rss "HTTP/1.1 403 Forbidden"
+2026-04-02 12:41:26,436 [INFO] httpx: HTTP Request: GET https://nitter.poast.org/_amtrades/rss "HTTP/1.1 403 Forbidden"
+2026-04-02 12:41:26,436 [INFO] httpx: HTTP Request: GET https://nitter.poast.org/OTT_Trackers/rss "HTTP/1.1 403 Forbidden"
+2026-04-02 12:41:26,437 [INFO] httpx: HTTP Request: GET https://nitter.poast.org/TTrades_edu/rss "HTTP/1.1 403 Forbidden"
+2026-04-02 12:41:39,056 [INFO] httpx: HTTP Request: GET https://nitter.kavin.rocks/TTrades_edu/rss "HTTP/1.1 502 Bad Gateway"
+2026-04-02 12:41:39,061 [INFO] httpx: HTTP Request: GET https://nitter.kavin.rocks/OTT_Trackers/rss "HTTP/1.1 502 Bad Gateway"
+2026-04-02 12:41:39,067 [INFO] httpx: HTTP Request: GET https://nitter.kavin.rocks/GxTradez/rss "HTTP/1.1 502 Bad Gateway"
+2026-04-02 12:41:39,068 [INFO] httpx: HTTP Request: GET https://nitter.kavin.rocks/_amtrades/rss "HTTP/1.1 502 Bad Gateway"
+2026-04-02 12:41:40,978 [INFO] httpx: HTTP Request: GET https://nitter.net/_amtrades/rss "HTTP/1.1 200 OK"
+2026-04-02 12:41:40,978 [INFO] httpx: HTTP Request: GET https://nitter.net/TTrades_edu/rss "HTTP/1.1 200 OK"
+2026-04-02 12:41:40,979 [INFO] httpx: HTTP Request: GET https://nitter.net/GxTradez/rss "HTTP/1.1 200 OK"
+2026-04-02 12:41:40,979 [INFO] httpx: HTTP Request: GET https://nitter.net/OTT_Trackers/rss "HTTP/1.1 200 OK"
+2026-04-02 12:41:40,990 [INFO] twitter_checker: Nitter instance OK: https://nitter.net  (20 items)
+2026-04-02 12:41:40,994 [INFO] twitter_checker: Nitter instance OK: https://nitter.net  (20 items)
+2026-04-02 12:41:41,000 [INFO] twitter_checker: Nitter instance OK: https://nitter.net  (20 items)
+2026-04-02 12:41:41,004 [INFO] twitter_checker: Nitter instance OK: https://nitter.net  (20 items)
+2026-04-02 12:41:41,006 [INFO] apscheduler.scheduler: Added job "check_youtube_channels" to job store "default"
+2026-04-02 12:41:41,006 [INFO] apscheduler.scheduler: Added job "check_twitter" to job store "default"
+2026-04-02 12:41:41,007 [INFO] apscheduler.scheduler: Scheduler started

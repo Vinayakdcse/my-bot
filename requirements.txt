@@ -6,7 +6,5 @@ python-dotenv==1.0.1
 # YouTube
 google-api-python-client==2.131.0
 
-# Twitter/X — uses Nitter RSS (public, no login needed)
-# No extra packages needed — uses httpx (above) + Python stdlib xml parser
-
-flask
+# Web server (Render keep-alive)
+flask==3.0.3
