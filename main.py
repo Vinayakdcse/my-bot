@@ -6,8 +6,8 @@ def main() -> None:
     _validate_config()
     init_db()
 
-    # ✅ Define scheduler HERE inside main()
-    scheduler = BlockingScheduler(timezone="UTC")
+    # ✅ USE BackgroundScheduler
+    scheduler = BackgroundScheduler(timezone="UTC")
 
     scheduler.add_job(
         check_youtube_channels,
@@ -36,7 +36,8 @@ def main() -> None:
     check_youtube_channels()
     check_twitter()
 
-    try:
-        scheduler.start()
-    except (KeyboardInterrupt, SystemExit):
-        log.info("Bot stopped by user.")
+    scheduler.start()
+
+    # ✅ VERY IMPORTANT (keep process alive)
+    while True:
+        time.sleep(60)
