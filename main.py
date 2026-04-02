@@ -1,8 +1,8 @@
 """
-main.py - Entry point. Starts the scheduler that polls YouTube and Twitter.
+main.py - Bot logic only. No Flask here.
 
-Run locally:      python main.py
-Run on Render:    python server.py  (Flask keep-alive + this bot)
+Run locally:   python main.py
+On Render:     python server.py  ← always use this for deployment
 """
 
 import logging
@@ -24,20 +24,8 @@ from database import init_db
 from youtube_checker import check_youtube_channels
 from twitter_checker import check_twitter
 
-# ── Logging ──────────────────────────────────
-
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("notifier.log"),
-    ],
-)
 log = logging.getLogger(__name__)
 
-
-# ── Startup checks ───────────────────────────
 
 def _validate_config() -> None:
     missing = []
@@ -49,11 +37,9 @@ def _validate_config() -> None:
         missing.append("YOUTUBE_API_KEY")
     if missing:
         log.critical("Missing required env vars: %s", ", ".join(missing))
-        log.critical("Please set them in your Render environment variables.")
+        log.critical("Set them in Render → Environment Variables.")
         sys.exit(1)
 
-
-# ── Main ─────────────────────────────────────
 
 def main() -> None:
     log.info("=" * 60)
@@ -65,7 +51,6 @@ def main() -> None:
 
     scheduler = BlockingScheduler(timezone="UTC")
 
-    # YouTube — every N minutes
     scheduler.add_job(
         check_youtube_channels,
         trigger=IntervalTrigger(minutes=YOUTUBE_POLL_INTERVAL_MINUTES),
@@ -74,7 +59,6 @@ def main() -> None:
         misfire_grace_time=120,
     )
 
-    # Twitter — every N minutes
     scheduler.add_job(
         check_twitter,
         trigger=IntervalTrigger(minutes=TWITTER_POLL_INTERVAL_MINUTES),
@@ -89,7 +73,6 @@ def main() -> None:
         TWITTER_POLL_INTERVAL_MINUTES,
     )
 
-    # Run once immediately on startup
     log.info("Running initial checks...")
     check_youtube_channels()
     check_twitter()
@@ -98,8 +81,17 @@ def main() -> None:
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
-        log.info("Bot stopped by user.")
+        log.info("Bot stopped.")
 
 
 if __name__ == "__main__":
+    # Direct local run only
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler("notifier.log"),
+        ],
+    )
     main()

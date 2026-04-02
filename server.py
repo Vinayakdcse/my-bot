@@ -1,8 +1,9 @@
 """
 server.py - Render deployment entry point.
 
-Starts Flask first (so Render detects the open port immediately),
-then starts the bot in the same process.
+Strategy:
+  1. Flask binds the port SYNCHRONOUSLY on the main thread first.
+  2. Bot runs in a background thread after Flask is confirmed up.
 
 Render start command: python server.py
 """
@@ -11,9 +12,17 @@ import os
 import time
 import threading
 import logging
-from flask import Flask
+import sys
 
+# ── Logging (set up before any imports that might log) ───────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
 log = logging.getLogger(__name__)
+
+from flask import Flask
 
 app = Flask(__name__)
 
@@ -28,23 +37,25 @@ def health():
     return {"status": "ok"}, 200
 
 
+def start_bot():
+    """Runs in a background thread. Delay ensures Flask is fully up first."""
+    time.sleep(5)  # wait for Flask to bind and Render to detect the port
+    log.info("Starting bot in background thread...")
+    try:
+        from main import main
+        main()
+    except Exception as e:
+        log.critical("Bot crashed: %s", e, exc_info=True)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
 
-    # ── Step 1: Start Flask in a background thread so the port opens immediately ──
-    # Render requires a port to be bound within ~30 seconds or it fails the deploy.
-    flask_thread = threading.Thread(
-        target=lambda: app.run(host="0.0.0.0", port=port),
-        daemon=True,
-        name="flask-keepalive",
-    )
-    flask_thread.start()
-    print(f"Flask keep-alive started on port {port}")
+    # Start bot in background BEFORE app.run() so the thread is queued
+    bot_thread = threading.Thread(target=start_bot, daemon=True, name="bot")
+    bot_thread.start()
 
-    # ── Step 2: Give Flask a moment to fully bind ──
-    time.sleep(2)
-
-    # ── Step 3: Start the bot (this blocks on scheduler.start()) ──
-    # Import here so Flask is already up before any heavy imports run
-    from main import main
-    main()
+    # app.run() blocks — Flask binds the port immediately on this line
+    # Render will detect the port within seconds
+    log.info("Flask binding on port %d ...", port)
+    app.run(host="0.0.0.0", port=port)
