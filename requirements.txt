@@ -6,8 +6,10 @@ python-dotenv==1.0.1
 # YouTube
 google-api-python-client==2.131.0
 
-# Video download (YouTube videos + Shorts → direct playback in Telegram)
-yt-dlp==2024.12.23
-
-# Web server (Render keep-alive)
+# Web server (health endpoint for UptimeRobot)
 flask==3.0.3
+
+# yt-dlp intentionally removed:
+# YouTube blocks all server downloads with "Sign in to confirm you're not a bot"
+# on any datacenter IP (Render, Railway, AWS, etc.) without personal cookies.
+# Removed to eliminate wasted startup time and RAM.

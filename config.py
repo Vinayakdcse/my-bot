@@ -28,8 +28,10 @@ YOUTUBE_CHANNELS = [
     "https://www.youtube.com/@HANNAHFOREX",
 ]
 
-# Poll every 1 minute
-YOUTUBE_POLL_INTERVAL_MINUTES = 1
+# 15 min = safe for YouTube API quota (10,000 units/day free)
+# 7 channels × ~3 API calls × 96 polls/day = ~2016 units/day (well within limit)
+# DO NOT set below 10 — you will exhaust the daily quota in hours
+YOUTUBE_POLL_INTERVAL_MINUTES = 15
 
 # ─────────────────────────────────────────────
 # TWITTER / X
@@ -41,26 +43,16 @@ TWITTER_ACCOUNTS = [
     "OTT_Trackers",
 ]
 
-# Poll every 1 minute
-TWITTER_POLL_INTERVAL_MINUTES = 1
+# 5 min is fine for Nitter RSS (no API quota)
+TWITTER_POLL_INTERVAL_MINUTES = 5
 
 TWITTER_KEYWORD_FILTER = [
     "Pay out", "discount", "prop firm", "reposted"
 ]
 
 # ─────────────────────────────────────────────
-# MEDIA DOWNLOAD (yt-dlp)
-# ─────────────────────────────────────────────
-# Max video size to download and upload to Telegram (bytes)
-# Telegram's bot upload limit is 50 MB
-YT_MAX_VIDEO_BYTES = 45 * 1024 * 1024   # 45 MB (safe margin)
-
-# If video is larger than this, send thumbnail + link instead of video
-YT_FALLBACK_TO_THUMBNAIL = True
-
-# ─────────────────────────────────────────────
 # GENERAL
 # ─────────────────────────────────────────────
 DATABASE_PATH = os.getenv("DATABASE_PATH", "seen_ids.db")
 ACCOUNTS_DB   = os.getenv("ACCOUNTS_DB",   "twscrape_accounts.db")
-LOG_LEVEL     = "INFO"   # DEBUG | INFO | WARNING | ERROR
+LOG_LEVEL     = "INFO"
