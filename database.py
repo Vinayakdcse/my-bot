@@ -1,9 +1,16 @@
 """
-database.py - Thread-safe SQLite helper using WAL mode + per-call connections.
+database.py - Thread-safe SQLite with WAL mode.
 
-FIX: sqlite3 connections are NOT thread-safe when shared.
-     We use check_same_thread=False + WAL journal mode so multiple
-     threads can read/write without "database is locked" errors.
+FIX: DATABASE_PATH defaults to "seen_ids.db" (relative path).
+     On Render, the working directory is /app but after a container restart
+     the /app filesystem may be reset (ephemeral storage), losing the DB.
+     The env var DATABASE_PATH should point to a persistent volume path
+     e.g. /app/data/seen_ids.db (set in Render environment variables).
+
+     If no persistent volume: the DB resets on each deploy and the bot
+     re-sends all historical content. This is NOT a code bug — it's a
+     Render free-tier limitation. Use Render's Disk add-on or an external
+     SQLite host (Turso, Railway volume) for persistence.
 """
 
 import os
@@ -20,9 +27,9 @@ log = logging.getLogger(__name__)
 
 def _conn() -> sqlite3.Connection:
     con = sqlite3.connect(DATABASE_PATH, check_same_thread=False, timeout=15)
-    # WAL mode: readers don't block writers and vice-versa
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA synchronous=NORMAL")
+    con.execute("PRAGMA busy_timeout=10000")   # FIX: wait up to 10s on lock instead of failing
     return con
 
 
@@ -41,46 +48,39 @@ def init_db() -> None:
                 seen_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-    log.info("Database initialised at %s", DATABASE_PATH)
+    log.info("Database ready: %s", DATABASE_PATH)
 
-
-# ── YouTube ───────────────────────────────────────────────────────────────────
 
 def is_video_seen(video_id: str) -> bool:
     try:
         with _conn() as con:
-            row = con.execute(
-                "SELECT 1 FROM seen_youtube WHERE video_id = ?", (video_id,)
-            ).fetchone()
-        return row is not None
+            return con.execute(
+                "SELECT 1 FROM seen_youtube WHERE video_id=?", (video_id,)
+            ).fetchone() is not None
     except Exception as exc:
-        log.error("is_video_seen error: %s", exc)
-        return False   # safe default: treat as unseen so we don't skip
+        log.error("is_video_seen(%s): %s", video_id, exc)
+        return False
 
 
 def mark_video_seen(video_id: str, channel_id: str) -> None:
     try:
         with _conn() as con:
             con.execute(
-                "INSERT OR IGNORE INTO seen_youtube (video_id, channel_id) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO seen_youtube (video_id, channel_id) VALUES (?,?)",
                 (video_id, channel_id),
             )
-        log.debug("Marked video seen: %s", video_id)
     except Exception as exc:
-        log.error("mark_video_seen error: %s", exc)
+        log.error("mark_video_seen(%s): %s", video_id, exc)
 
-
-# ── Twitter ───────────────────────────────────────────────────────────────────
 
 def is_tweet_seen(tweet_id: str) -> bool:
     try:
         with _conn() as con:
-            row = con.execute(
-                "SELECT 1 FROM seen_tweets WHERE tweet_id = ?", (tweet_id,)
-            ).fetchone()
-        return row is not None
+            return con.execute(
+                "SELECT 1 FROM seen_tweets WHERE tweet_id=?", (tweet_id,)
+            ).fetchone() is not None
     except Exception as exc:
-        log.error("is_tweet_seen error: %s", exc)
+        log.error("is_tweet_seen(%s): %s", tweet_id, exc)
         return False
 
 
@@ -91,6 +91,5 @@ def mark_tweet_seen(tweet_id: str) -> None:
                 "INSERT OR IGNORE INTO seen_tweets (tweet_id) VALUES (?)",
                 (tweet_id,),
             )
-        log.debug("Marked tweet seen: %s", tweet_id)
     except Exception as exc:
-        log.error("mark_tweet_seen error: %s", exc)
+        log.error("mark_tweet_seen(%s): %s", tweet_id, exc)
